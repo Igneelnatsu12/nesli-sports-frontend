@@ -44,6 +44,31 @@ function formatCompactHour(hour: number) {
   return `${display}${suffix}`
 }
 
+function formatSummaryRanges(bookings: BookingSelection[]) {
+  const courtNumbers = [...new Set(bookings.map(b => b.court))].sort((a, b) => a - b)
+  return courtNumbers.flatMap(court => {
+    const hours = bookings.filter(b => b.court === court).map(b => b.hour).sort((a, b) => a - b)
+    const ranges: Array<{ start: number; end: number }> = []
+    for (const hour of hours) {
+      const last = ranges[ranges.length - 1]
+      if (last && hour === last.end) last.end = hour + 1
+      else ranges.push({ start: hour, end: hour + 1 })
+    }
+    return ranges.map(range => {
+      const start = formatCompactHour(range.start)
+      const end = formatCompactHour(range.end)
+      const startSuffix = start.slice(-2).toUpperCase()
+      const endSuffix = end.slice(-2).toUpperCase()
+      const startTime = start.slice(0, -2)
+      const endTime = end.slice(0, -2)
+      const rangeText = startSuffix === endSuffix
+        ? `${startTime}–${endTime}${endSuffix}`
+        : `${start.toUpperCase()}–${end.toUpperCase()}`
+      return `Court ${court}: ${rangeText}`
+    })
+  }).join('; ')
+}
+
 function formatBookingRanges(bookings: BookingSelection[]) {
   const courts = [...new Set(bookings.map(b => b.court))].sort((a, b) => a - b)
   return courts.flatMap(court => {
@@ -351,7 +376,7 @@ function App() {
                       <tr className="period-row"><td colSpan={courts.length + 1}>Morning</td></tr>
                       {slots.filter(slot => slot.start < 12).map(slot => (
                         <tr key={slot.start}>
-                          <td className="time-cell"><span>{slot.label}</span><strong>₱{rateFor(slot.start)}</strong></td>
+                          <td className="time-cell"><span className="time-range"><span>{formatHour(slot.start)} –</span><span>{formatHour(slot.end)}</span></span></td>
                           {courts.map(court => {
                             const booked = availabilityLoading || Boolean(availabilityError) || isBooked(court, slot.start) || isPastBookingCutoff(selectedDate, slot.start)
                             const selected = selectedBookings.some(item => item.court === court && item.hour === slot.start)
@@ -362,7 +387,7 @@ function App() {
                       <tr className="period-row"><td colSpan={courts.length + 1}>Afternoon</td></tr>
                       {slots.filter(slot => slot.start >= 12 && slot.start < 17).map(slot => (
                         <tr key={slot.start}>
-                          <td className="time-cell"><span>{slot.label}</span><strong>₱{rateFor(slot.start)}</strong></td>
+                          <td className="time-cell"><span className="time-range"><span>{formatHour(slot.start)} –</span><span>{formatHour(slot.end)}</span></span></td>
                           {courts.map(court => {
                             const booked = availabilityLoading || Boolean(availabilityError) || isBooked(court, slot.start) || isPastBookingCutoff(selectedDate, slot.start)
                             const selected = selectedBookings.some(item => item.court === court && item.hour === slot.start)
@@ -373,7 +398,7 @@ function App() {
                       <tr className="period-row"><td colSpan={courts.length + 1}>Evening</td></tr>
                       {slots.filter(slot => slot.start >= 17).map(slot => (
                         <tr key={slot.start}>
-                          <td className="time-cell"><span>{slot.label}</span><strong>₱{rateFor(slot.start)}</strong></td>
+                          <td className="time-cell"><span className="time-range"><span>{formatHour(slot.start)} –</span><span>{formatHour(slot.end)}</span></span></td>
                           {courts.map(court => {
                             const booked = availabilityLoading || Boolean(availabilityError) || isBooked(court, slot.start) || isPastBookingCutoff(selectedDate, slot.start)
                             const selected = selectedBookings.some(item => item.court === court && item.hour === slot.start)
@@ -393,7 +418,7 @@ function App() {
                 <h3>Booking Summary</h3>
                 <div className="summary-row"><CalendarDays size={17}/><span>{dateLabel(selectedDate)}</span></div>
                 <div className="summary-row"><MapPin size={17}/><span>{selectedBookings.length ? [...new Set(selectedBookings.map(item => item.court))].map(court => `Court ${court}`).join(', ') : 'Select court'}</span></div>
-                <div className="summary-row summary-bookings"><Clock3 size={17}/><span>{selectedBookings.length ? selectedBookings.map(item => `Court ${item.court}: ${formatHour(item.hour)}–${formatHour(item.hour + 1)}`).join('; ') : 'Select time slots'}</span></div>
+                <div className="summary-row summary-bookings"><Clock3 size={17}/><span>{selectedBookings.length ? formatSummaryRanges(selectedBookings) : 'Select time slots'}</span></div>
                 <div className="summary-row"><CreditCard size={17}/><span>{selectedBookings.length ? `₱${total.toLocaleString()} court fee` : 'Rate: ₱200 / ₱300 per hour'}</span></div>
                 <button className="button button-blue full" disabled={!selectedBookings.length} onClick={() => { setStep(2); window.setTimeout(() => document.getElementById('player-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}>Continue to Details <ArrowRight size={16}/></button>
               </aside>
