@@ -112,7 +112,6 @@ function App() {
   const [confirmation, setConfirmation] = useState<any>(null)
 
   const total = useMemo(() => selectedBookings.reduce((sum, booking) => sum + rateFor(booking.hour), 0), [selectedBookings])
-  const reservationFee = 150
 
   useEffect(() => {
     let cancelled = false
@@ -181,7 +180,7 @@ function App() {
         .upload(receiptPath, receipt, { upsert: false })
       if (uploadError) throw uploadError
 
-      const rows = selectedBookings.map((booking, index) => ({
+      const rows = selectedBookings.map((booking) => ({
         booking_group_id: groupId,
         booking_date: localDateISO(selectedDate),
         court_number: booking.court,
