@@ -502,10 +502,8 @@ footer { border-top: 1px solid var(--line); display: flex; align-items: center; 
 
 }
 
-//* =========================================
-
-   NESLI SPORTS VISUAL POLISH / DESKTOP LAYOUT
-
+/* ========================================= */
+/* NESLI SPORTS VISUAL POLISH / DESKTOP LAYOUT */
 /* ========================================= */
 
 .app-shell { width: 100%; max-width: 1440px; margin: 0 auto; overflow: clip; }
