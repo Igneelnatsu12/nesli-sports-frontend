@@ -430,7 +430,7 @@ function App() {
                 <div className="details-panel reservation-confirmation" id="reservation-confirmation">
                 <div className="confirmation-header">
                   <div className="confirmation-success-icon"><CheckCircle2 size={28}/></div>
-                  <div><p className="eyebrow dark">NESLI SPORTS</p><h2>Reservation Request Received</h2><p className="confirmation-subtitle">Save this confirmation for your records. Your booking is not final until an admin confirms it.</p></div>
+                  <div><p className="eyebrow dark">NESLI SPORTS</p><h2>Reservation Request Received</h2><p className="confirmation-subtitle">Awaiting admin confirmation.</p></div>
                 </div>
                 <div className="confirmation-reference"><small>BOOKING REFERENCE</small><strong>{confirmation.reference}</strong><span className="confirmation-status">PENDING ADMIN CONFIRMATION</span></div>
                 <div className="confirmation-grid">
@@ -438,13 +438,13 @@ function App() {
                   <div><small>Mobile Number</small><strong>{confirmation.phone}</strong></div>
                   <div><small>Play Date</small><strong>{confirmation.date.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong></div>
                   <div><small>Booked Courts & Times</small><strong>{formatBookingRanges(confirmation.bookings)}</strong></div>
-                  <div><small>Rental Total</small><strong>₱{confirmation.total.toLocaleString()}</strong></div>
+                  <div><small>Rent Total</small><strong>₱{confirmation.total.toLocaleString()}</strong></div>
                   <div><small>Payment Option</small><strong>{confirmation.paymentMethod}</strong></div>
-                  <div><small>Full Payment Submitted</small><strong>₱{confirmation.total.toLocaleString()}</strong></div>
-                  <div><small>Payment Status</small><strong>Awaiting receipt verification</strong></div>
+                  
+                  <div className="confirmation-payment-status"><small>Payment Status</small><strong>Awaiting receipt verification</strong></div>
                 </div>
-                <div className="confirmation-policy"><strong>Important</strong><p>Your reservation is pending admin confirmation. Please keep your booking reference. Payment is subject to receipt verification.</p></div>
-                <p className="confirmation-footnote">This is a reservation request receipt, not proof of admin approval or payment verification.</p>
+                <div className="confirmation-policy"><strong>Important</strong><p>Keep your booking reference. Reservation is pending admin confirmation and payment receipt verification.</p></div>
+                <p className="confirmation-footnote">Request receipt only—not final approval.</p>
                 <button className="button button-blue" onClick={() => { setStep(1); setSelectedBookings([]); setName(''); setPhone(''); setReceipt(null); setConfirmation(null); setNotice(''); window.scrollTo({ top: document.getElementById('booking')?.offsetTop ?? 0, behavior: 'smooth' }) }}>Close Confirmation</button>
                 </div>
               </>
@@ -662,10 +662,27 @@ const confirmationStyles = `
 #reservation-confirmation .confirmation-footnote { color: #64748b; font-size: 12px; line-height: 1.5; margin: 0 0 18px; }
 #reservation-confirmation > button { min-height: 44px; padding: 11px 20px; border-radius: 10px; font-weight: 700; }
 @media(max-width:640px) {
-  #reservation-confirmation { padding: 16px; border-radius: 16px; }
-  #reservation-confirmation .confirmation-grid { grid-template-columns: 1fr; gap: 9px; }
-  #reservation-confirmation .confirmation-header { gap: 12px; }
-  #reservation-confirmation .confirmation-success-icon { width: 44px; height: 44px; flex-basis: 44px; }
+  #reservation-confirmation { padding: 10px; border-radius: 12px; margin: 8px 0; box-shadow: none; }
+  #reservation-confirmation .confirmation-header { gap: 8px; margin-bottom: 8px; align-items: center; }
+  #reservation-confirmation .confirmation-success-icon { width: 32px; height: 32px; flex-basis: 32px; border-radius: 9px; }
+  #reservation-confirmation .confirmation-success-icon svg { width: 20px; height: 20px; }
+  #reservation-confirmation .confirmation-header .eyebrow { display: none; }
+  #reservation-confirmation .confirmation-header h2 { font-size: 18px; line-height: 1.15; margin: 0 0 2px; }
+  #reservation-confirmation .confirmation-subtitle { font-size: 11px; line-height: 1.25; }
+  #reservation-confirmation .confirmation-reference { gap: 3px; padding: 7px 8px; margin-bottom: 7px; border-radius: 9px; }
+  #reservation-confirmation .confirmation-reference small { font-size: 9px; letter-spacing: .6px; }
+  #reservation-confirmation .confirmation-reference strong { font-size: 20px; letter-spacing: 1px; }
+  #reservation-confirmation .confirmation-status { padding: 4px 7px; font-size: 9px; letter-spacing: 0; }
+  #reservation-confirmation .confirmation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 7px; }
+  #reservation-confirmation .confirmation-grid > div { gap: 2px; padding: 6px 7px; border-radius: 7px; }
+  #reservation-confirmation .confirmation-grid small { font-size: 9px; line-height: 1.1; }
+  #reservation-confirmation .confirmation-grid strong { font-size: 11px; line-height: 1.25; }
+  #reservation-confirmation .confirmation-grid > div:nth-child(4),
+  #reservation-confirmation .confirmation-grid > div:nth-child(8) { grid-column: 1 / -1; }
+  #reservation-confirmation .confirmation-policy { padding: 7px 8px; margin-bottom: 5px; border-radius: 7px; font-size: 10px; line-height: 1.25; }
+  #reservation-confirmation .confirmation-policy p { margin-top: 2px; line-height: 1.25; }
+  #reservation-confirmation .confirmation-footnote { font-size: 9px; line-height: 1.2; margin: 0 0 7px; }
+  #reservation-confirmation > button { min-height: 34px; padding: 7px 12px; border-radius: 7px; font-size: 11px; width: 100%; }
 }
 `
 
