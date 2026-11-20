@@ -140,14 +140,17 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    const date = localDateISO(selectedDate)
+    const today = localDateISO(new Date())
+
     const loadAvailability = async () => {
       setAvailabilityLoading(true)
       setAvailabilityError('')
-      const date = localDateISO(selectedDate)
-      const today = localDateISO(new Date())
       const { data, error } = await supabase
         .from('bookings')
         .select('booking_date, court_number, start_time, end_time, status')
+        // Rejected and cancelled reservations are intentionally excluded,
+        // so their slots appear Available again on the public booking page.
         .in('status', ['pending', 'confirmed'])
         .in('booking_date', [...new Set([date, today])])
       if (cancelled) return
@@ -162,8 +165,22 @@ function App() {
       }
       setAvailabilityLoading(false)
     }
+
     loadAvailability()
-    return () => { cancelled = true }
+
+    // Refresh the public availability grid when an admin changes a booking
+    // status (e.g. rejects a receipt), without requiring the customer to reload.
+    const channel = supabase
+      .channel(`public-booking-availability-${date}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        loadAvailability()
+      })
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+    }
   }, [selectedDate])
 
   const changeDate = (days: number) => {
