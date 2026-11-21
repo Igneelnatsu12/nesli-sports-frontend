@@ -146,53 +146,43 @@ function App() {
     const loadAvailability = async () => {
       setAvailabilityLoading(true)
       setAvailabilityError('')
-     const loadAvailability = async () => {
-  setAvailabilityLoading(true)
-  setAvailabilityError('')
 
-  const dates = [...new Set([date, today])]
+      const dates = [...new Set([date, today])]
+      const results = await Promise.all(
+        dates.map(bookingDate =>
+          supabase.rpc('get_public_court_availability', {
+            p_booking_date: bookingDate
+          })
+        )
+      )
 
-  const results = await Promise.all(
-    dates.map(bookingDate =>
-      supabase.rpc('get_public_court_availability', {
-        p_booking_date: bookingDate
-      })
-    )
-  )
+      if (cancelled) return
 
-  if (cancelled) return
+      const error = results.find(result => result.error)?.error
 
-  const error = results.find(result => result.error)?.error
+      if (error) {
+        setAvailabilityError(error.message)
+        setAvailabilityBookings([])
+        setTodayBookings([])
+        console.error('Availability RPC error:', error)
+      } else {
+        const rows = results.flatMap(result => result.data ?? [])
+        setAvailabilityBookings(rows.filter(row => row.booking_date === date))
+        setTodayBookings(rows.filter(row => row.booking_date === today))
+      }
 
-  if (error) {
-    setAvailabilityError(error.message)
-    setAvailabilityBookings([])
-    setTodayBookings([])
-    console.error('Availability RPC error:', error)
-  } else {
-    const rows = results.flatMap(result => result.data ?? [])
-
-    setAvailabilityBookings(
-      rows.filter(row => row.booking_date === date)
-    )
-
-    setTodayBookings(
-      rows.filter(row => row.booking_date === today)
-    )
-  }
-
-  setAvailabilityLoading(false)
-}
+      setAvailabilityLoading(false)
+    }
 
     loadAvailability()
 
-    // Refresh the public availability grid when an admin changes a booking
-    // status (e.g. rejects a receipt), without requiring the customer to reload.
     const channel = supabase
       .channel(`public-booking-availability-${date}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
-        loadAvailability()
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bookings' },
+        () => loadAvailability()
+      )
       .subscribe()
 
     return () => {
@@ -229,11 +219,10 @@ function App() {
     // Re-check selected slots against Supabase immediately before submission.
     // This protects against stale availability on mobile and desktop.
     const bookingDate = localDateISO(selectedDate)
-    const { data: latestBookings, error: availabilityCheckError } = await supabase
-      .from('bookings')
-      .select('booking_date, court_number, start_time, status')
-      .eq('booking_date', bookingDate)
-      .in('status', ['pending', 'confirmed'])
+    const { data: latestBookings, error: availabilityCheckError } =
+      await supabase.rpc('get_public_court_availability', {
+        p_booking_date: bookingDate
+      })
 
     if (availabilityCheckError) {
       setNotice('Unable to verify availability right now. Please try again.')
@@ -242,7 +231,7 @@ function App() {
     }
 
     const conflicts = selectedBookings.filter(selected =>
-      (latestBookings ?? []).some(existing =>
+      (latestBookings ?? []).some((existing: { court_number: number; start_time: string }) =>
         existing.court_number === selected.court &&
         existing.start_time?.slice(0, 5) === `${String(selected.hour).padStart(2, '0')}:00`
       )
