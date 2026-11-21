@@ -207,6 +207,38 @@ function App() {
       setNotice('Some selected time slots are no longer bookable. Please select a future or eligible slot.')
       return
     }
+
+    // Re-check selected slots against Supabase immediately before submission.
+    // This protects against stale availability on mobile and desktop.
+    const bookingDate = localDateISO(selectedDate)
+    const { data: latestBookings, error: availabilityCheckError } = await supabase
+      .from('bookings')
+      .select('booking_date, court_number, start_time, status')
+      .eq('booking_date', bookingDate)
+      .in('status', ['pending', 'confirmed'])
+
+    if (availabilityCheckError) {
+      setNotice('Unable to verify availability right now. Please try again.')
+      console.error('Availability validation error:', availabilityCheckError)
+      return
+    }
+
+    const conflicts = selectedBookings.filter(selected =>
+      (latestBookings ?? []).some(existing =>
+        existing.court_number === selected.court &&
+        existing.start_time?.slice(0, 5) === `${String(selected.hour).padStart(2, '0')}:00`
+      )
+    )
+
+    if (conflicts.length > 0) {
+      setAvailabilityBookings(latestBookings ?? [])
+      setSelectedBookings(prev => prev.filter(selected =>
+        !conflicts.some(conflict => conflict.court === selected.court && conflict.hour === selected.hour)
+      ))
+      setNotice('One or more selected slots have just been reserved. They have been removed from your selection. Please choose another available slot.')
+      return
+    }
+
     if (!name.trim() || phone.length < 10 || selectedBookings.length === 0 || !receipt) {
       setNotice('Please complete your details, select a slot, and upload your payment receipt.')
       return
