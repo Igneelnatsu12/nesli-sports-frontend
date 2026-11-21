@@ -349,16 +349,17 @@ function App() {
         }
         @media (max-width: 640px) {
           .header {
-            justify-content: flex-start !important;
-            gap: 14px !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
             position: relative !important;
           }
           .header .brand {
-            margin-right: 0 !important;
+            margin-right: auto !important;
           }
           .header .menu-button {
             position: static !important;
-            margin: 0 !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
             flex: 0 0 auto !important;
           }
           .header .nav {
@@ -371,16 +372,49 @@ function App() {
             z-index: 100 !important;
           }
         }
+        /* Uniform white background across all main website sections */
+        .app-shell,
+        main,
+        .rates-section,
+        .courts-section,
+        .about-section {
+          background: #ffffff !important;
+        }
+        .court-availability-container,
+        .court-availability-heading,
+        .availability-note {
+          background: #ffffff !important;
+        }
+        /* Requested smaller section heading and compact court availability cards */
         .rates-section .section-heading h2,
         .court-availability-heading h2 {
-          font-size: 30px !important;
+          font-size: 20px !important;
           line-height: 1.2 !important;
         }
+        .court-availability-cards {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 8px !important;
+        }
+        .availability-card {
+          zoom: 0.9 !important;
+          min-width: 0 !important;
+        }
+        /* Keep rate cards more compact while retaining readable content */
+        .rate-cards {
+          zoom: 0.8 !important;
+        }
+        .availability-card-top,
+        .availability-card-body,
+        .availability-card-footer {
+          padding: 10px !important;
+        }
         @media (max-width: 640px) {
-          .rates-section .section-heading h2,
-          .court-availability-heading h2 {
-            font-size: 24px !important;
-          }
+          .rates-section .section-heading h2 { font-size: 15px !important; }
+          .court-availability-heading h2 { font-size: 15px !important; }
+          .court-availability-cards { gap: 8px !important; }
+          .availability-card { zoom: 0.9 !important; }
+          .rate-cards { zoom: 0.8 !important; }
         }
       `}</style>
       <header className="header">
@@ -642,7 +676,10 @@ function App() {
             <div className="court-availability-cards">
               {courts.map(court => {
                 const bookedSlots = todayBookings.filter(b => b.court_number === court).map(b => Number(b.start_time.slice(0, 2)))
-                const slotsLeft = slots.length - bookedSlots.length
+                const slotsLeft = slots.filter(slot => {
+                  const hour = slot.start
+                  return !bookedSlots.includes(hour) && !isPastBookingCutoff(new Date(), hour)
+                }).length
                 const availability = (slotsLeft / slots.length) * 100
 
                 return (
