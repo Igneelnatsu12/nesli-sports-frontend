@@ -146,25 +146,43 @@ function App() {
     const loadAvailability = async () => {
       setAvailabilityLoading(true)
       setAvailabilityError('')
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('booking_date, court_number, start_time, end_time, status')
-        // Rejected and cancelled reservations are intentionally excluded,
-        // so their slots appear Available again on the public booking page.
-        .in('status', ['pending', 'confirmed'])
-        .in('booking_date', [...new Set([date, today])])
-      if (cancelled) return
-      if (error) {
-        setAvailabilityError(error.message)
-        setAvailabilityBookings([])
-        setTodayBookings([])
-      } else {
-        const rows = data ?? []
-        setAvailabilityBookings(rows.filter(row => row.booking_date === date))
-        setTodayBookings(rows.filter(row => row.booking_date === today))
-      }
-      setAvailabilityLoading(false)
-    }
+     const loadAvailability = async () => {
+  setAvailabilityLoading(true)
+  setAvailabilityError('')
+
+  const dates = [...new Set([date, today])]
+
+  const results = await Promise.all(
+    dates.map(bookingDate =>
+      supabase.rpc('get_public_court_availability', {
+        p_booking_date: bookingDate
+      })
+    )
+  )
+
+  if (cancelled) return
+
+  const error = results.find(result => result.error)?.error
+
+  if (error) {
+    setAvailabilityError(error.message)
+    setAvailabilityBookings([])
+    setTodayBookings([])
+    console.error('Availability RPC error:', error)
+  } else {
+    const rows = results.flatMap(result => result.data ?? [])
+
+    setAvailabilityBookings(
+      rows.filter(row => row.booking_date === date)
+    )
+
+    setTodayBookings(
+      rows.filter(row => row.booking_date === today)
+    )
+  }
+
+  setAvailabilityLoading(false)
+}
 
     loadAvailability()
 
