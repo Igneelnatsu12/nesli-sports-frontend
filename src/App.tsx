@@ -336,13 +336,69 @@ function App() {
         }
         .rates-section .section-heading h2,
         .court-availability-heading h2 {
-          font-size: 30px !important;
+          font-size: 18px !important;
           line-height: 1.2 !important;
+          margin: 0 !important;
+        }
+        .rates-section .section-heading,
+        .court-availability-heading {
+          margin-bottom: 10px !important;
+          gap: 6px !important;
+        }
+        .rates-section,
+        .courts-section {
+          padding-top: 24px !important;
+          padding-bottom: 24px !important;
+        }
+        .header {
+          position: relative !important;
         }
         @media (max-width: 640px) {
           .rates-section .section-heading h2,
           .court-availability-heading h2 {
-            font-size: 24px !important;
+            font-size: 14px !important;
+          }
+          .rates-section .section-heading,
+          .court-availability-heading {
+            margin-bottom: 6px !important;
+          }
+          .nav {
+            display: none !important;
+          }
+          .nav.open {
+            display: flex !important;
+            position: absolute !important;
+            top: 100% !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+            background: #ffffff !important;
+            padding: 8px 16px 14px !important;
+            z-index: 9999 !important;
+            box-shadow: 0 12px 20px rgba(16, 40, 75, .14) !important;
+          }
+          .nav.open a {
+            display: block !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            padding: 14px 12px !important;
+            color: #10284b !important;
+            text-decoration: none !important;
+            border-bottom: 1px solid #e5eaf0 !important;
+          }
+          .nav.open a:last-child {
+            border-bottom: 0 !important;
+          }
+          .menu-button {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: relative !important;
+            z-index: 10000 !important;
           }
         }
       `}</style>
