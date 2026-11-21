@@ -135,6 +135,7 @@ function App() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false)
   const [availabilityError, setAvailabilityError] = useState('')
   const [confirmation, setConfirmation] = useState<any>(null)
+  const [showReservationGuidelines, setShowReservationGuidelines] = useState(false)
 
   const total = useMemo(() => selectedBookings.reduce((sum, booking) => sum + rateFor(booking.hour), 0), [selectedBookings])
 
@@ -328,6 +329,22 @@ function App() {
           color: #64748b !important;
           cursor: not-allowed;
         }
+        /* Minor layout adjustments requested */
+        .header {
+          position: static !important;
+          top: auto !important;
+        }
+        .rates-section .section-heading h2,
+        .court-availability-heading h2 {
+          font-size: 30px !important;
+          line-height: 1.2 !important;
+        }
+        @media (max-width: 640px) {
+          .rates-section .section-heading h2,
+          .court-availability-heading h2 {
+            font-size: 24px !important;
+          }
+        }
       `}</style>
       <header className="header">
         <a className="brand" href="#home" aria-label="NESLI Sports home">
@@ -344,9 +361,6 @@ function App() {
           <a href="#rates" onClick={() => setMobileMenu(false)}>Rates</a>
           <a href="#about" onClick={() => setMobileMenu(false)}>About</a>
         </nav>
-        <button className="admin-login-button" onClick={() => {
-  window.location.href = '/admin'
-}} style={{ marginLeft: 12, padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#10284b", fontWeight: 700, cursor: "pointer" }}>Login / Admin</button>
         <button className="menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle menu">
           {mobileMenu ? <X /> : <Menu />}
         </button>
@@ -476,9 +490,39 @@ function App() {
                 <div className="summary-row"><MapPin size={17}/><span>{selectedBookings.length ? [...new Set(selectedBookings.map(item => item.court))].map(court => `Court ${court}`).join(', ') : 'Select court'}</span></div>
                 <div className="summary-row summary-bookings"><Clock3 size={17}/><span>{selectedBookings.length ? formatSummaryRanges(selectedBookings) : 'Select time slots'}</span></div>
                 <div className="summary-row"><CreditCard size={17}/><span>{selectedBookings.length ? `₱${total.toLocaleString()} court fee` : 'Rate: ₱200 / ₱300 per hour'}</span></div>
-                <button className="button button-blue full" disabled={!selectedBookings.length} onClick={() => { setStep(2); window.setTimeout(() => document.getElementById('player-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}>Continue to Details <ArrowRight size={16}/></button>
+                <button className="button button-blue full" disabled={!selectedBookings.length} onClick={() => setShowReservationGuidelines(true)}>Continue to Details <ArrowRight size={16}/></button>
               </aside>
             </div>
+
+            {showReservationGuidelines && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reservation-guidelines-title"
+                style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(10, 24, 48, .58)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+              >
+                <div style={{ width: 'min(520px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', color: '#10284b', borderRadius: 18, padding: 24, boxShadow: '0 25px 70px rgba(0,0,0,.25)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <p className="eyebrow dark" style={{ margin: '0 0 6px' }}>NESLI SPORTS</p>
+                      <h2 id="reservation-guidelines-title" style={{ margin: 0, fontSize: 24 }}>Reservation Guidelines</h2>
+                    </div>
+                    <button type="button" className="icon-button" aria-label="Close guidelines" onClick={() => setShowReservationGuidelines(false)}><X size={20}/></button>
+                  </div>
+                  <ul style={{ paddingLeft: 22, margin: '18px 0', display: 'grid', gap: 12, lineHeight: 1.55 }}>
+                    <li>Reservations are noted and provisionally recorded upon request.</li>
+                    <li>Full payment must be made at least <strong>72 hours before</strong> your scheduled booking to secure your reservation.</li>
+                    <li>Failure to pay within the specified period may result in cancellation of your provisional reservation, and the court may be made available to other players.</li>
+                    <li>Reservations are confirmed only once payment has been received and verified.</li>
+                  </ul>
+                  <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 14 }}>Please confirm that you have read and understood these guidelines before proceeding.</p>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button type="button" className="button button-blue" style={{ flex: '1 1 180px' }} onClick={() => { setShowReservationGuidelines(false); setStep(2); window.setTimeout(() => document.getElementById('player-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}>I Agree & Continue <ArrowRight size={16}/></button>
+                    <button type="button" className="button button-outline" onClick={() => setShowReservationGuidelines(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {step === 4 && confirmation ? (
               <>
@@ -539,7 +583,7 @@ function App() {
         </section>
 
         <section className="rates-section" id="rates">
-          <div className="section-heading"><div><p className="eyebrow dark">SIMPLE & TRANSPARENT</p><h2>Court Rates</h2></div></div>
+          <div className="section-heading"><div><h2>Court Rates</h2></div></div>
           <div className="rate-cards">
             <div className="rate-card"><div className="rate-icon"><SunIcon/></div><p>DAYTIME</p><h3>₱200<span>/hour</span></h3><small>5:00 AM – 5:00 PM</small></div>
             <div className="rate-card evening"><div className="rate-icon"><Clock3/></div><p>EVENING</p><h3>₱300<span>/hour</span></h3><small>5:00 PM – 11:00 PM</small></div>
@@ -755,6 +799,11 @@ function AdminPortal({ onClose }: { onClose: () => void }) {
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({})
   const [amountInputs, setAmountInputs] = useState<Record<string, string>>({})
   const [notesInputs, setNotesInputs] = useState<Record<string, string>>({})
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -829,6 +878,29 @@ function AdminPortal({ onClose }: { onClose: () => void }) {
     }
     setSession(data.session)
     setLoading(false)
+  }
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordMessage('')
+    if (newPassword.length < 6) {
+      setPasswordMessage('Password must be at least 6 characters long.')
+      return
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMessage('The passwords do not match.')
+      return
+    }
+    setPasswordLoading(true)
+    const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword })
+    setPasswordLoading(false)
+    if (passwordError) {
+      setPasswordMessage(passwordError.message)
+      return
+    }
+    setPasswordMessage('Password changed successfully.')
+    setNewPassword('')
+    setConfirmNewPassword('')
   }
 
   const logout = async () => {
@@ -932,9 +1004,21 @@ function AdminPortal({ onClose }: { onClose: () => void }) {
   return <div style={adminStyle}><div style={panelStyle}>
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <div><p style={{ margin: 0, color: '#2563eb', fontWeight: 800, fontSize: 12, letterSpacing: 1 }}>NESLI SPORTS</p><h2 style={{ margin: '4px 0' }}>Admin Dashboard</h2><small>{session.user.email}</small></div>
-      <div style={{ display: 'flex', gap: 8 }}><button onClick={loadBookings}>Refresh</button><button onClick={logout}>Sign out</button><button onClick={onClose}>Close</button></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button onClick={loadBookings}>Refresh</button><button onClick={() => { setShowChangePassword(true); setPasswordMessage(''); setNewPassword(''); setConfirmNewPassword('') }}>Change Password</button><button onClick={logout}>Sign out</button><button onClick={onClose}>Close</button></div>
     </header>
     {error && <p style={{ color: '#b91c1c', background: '#fee2e2', padding: 10, borderRadius: 8 }}>{error}</p>}
+    {showChangePassword && <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(10,24,48,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'white', color: '#10284b', width: 'min(420px, 100%)', padding: 24, borderRadius: 16, boxShadow: '0 25px 70px rgba(0,0,0,.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}><h3 style={{ margin: 0 }}>Change Password</h3><button type="button" onClick={() => setShowChangePassword(false)}>✕</button></div>
+        <p style={{ color: '#64748b', fontSize: 14 }}>Enter and confirm your new admin password.</p>
+        <form onSubmit={changePassword} style={{ display: 'grid', gap: 12 }}>
+          <input type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password (minimum 6 characters)" required minLength={6} style={{ padding: 12, border: '1px solid #cbd5e1', borderRadius: 8, width: '100%', boxSizing: 'border-box' }} />
+          <input type="password" autoComplete="new-password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="Confirm new password" required minLength={6} style={{ padding: 12, border: '1px solid #cbd5e1', borderRadius: 8, width: '100%', boxSizing: 'border-box' }} />
+          {passwordMessage && <p style={{ margin: 0, color: passwordMessage === 'Password changed successfully.' ? '#047857' : '#b91c1c' }}>{passwordMessage}</p>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="button" onClick={() => setShowChangePassword(false)} style={{ padding: '10px 14px' }}>Cancel</button><button type="submit" disabled={passwordLoading} style={{ padding: '10px 14px', background: '#ffca1a', border: 0, borderRadius: 8, fontWeight: 700 }}>{passwordLoading ? 'Updating…' : 'Update Password'}</button></div>
+        </form>
+      </div>
+    </div>}
     <nav style={{ display: 'flex', gap: 8, margin: '20px 0', flexWrap: 'wrap' }}>
       {(['dashboard', 'pending', 'courtview'] as const).map(t => <button key={t} onClick={() => setTab(t)} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: tab === t ? '#112b50' : 'white', color: tab === t ? 'white' : '#112b50', fontWeight: 700 }}>{t === 'dashboard' ? 'Dashboard' : t === 'pending' ? `Pending Verification (${pending.length})` : 'Court View'}</button>)}
     </nav>
