@@ -139,6 +139,15 @@ function App() {
 
   const total = useMemo(() => selectedBookings.reduce((sum, booking) => sum + rateFor(booking.hour), 0), [selectedBookings])
 
+  // After a successful booking, move the viewport to the confirmation on both desktop and mobile.
+  useEffect(() => {
+    if (step !== 4 || !confirmation) return
+    const timer = window.setTimeout(() => {
+      document.getElementById('reservation-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [step, confirmation])
+
   useEffect(() => {
     let cancelled = false
     const date = localDateISO(selectedDate)
@@ -781,6 +790,7 @@ type AdminBooking = {
 
 const confirmationStyles = `
 #reservation-confirmation {
+  scroll-margin-top: 16px;
   width: 100%;
   box-sizing: border-box;
   padding: clamp(18px, 3vw, 32px);
