@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 import {
   CalendarDays, Clock3, MapPin, Menu, ArrowRight,
   CheckCircle2, CreditCard, ChevronLeft, ChevronRight, Trophy,
-  Zap, Bell, X, Upload
+  Zap, X, Upload, Search, FileText
 } from 'lucide-react'
 
 type Court = number
@@ -42,6 +42,41 @@ function formatCompactHour(hour: number) {
   const suffix = h >= 12 ? 'pm' : 'am'
   const display = h % 12 || 12
   return `${display}${suffix}`
+}
+
+
+function formatLookupRange(startHour: number, endHour: number) {
+  const start = startHour % 24
+  const end = endHour % 24
+  const startDisplay = start % 12 || 12
+  const endDisplay = end % 12 || 12
+  const startSuffix = start >= 12 ? 'PM' : 'AM'
+  const endSuffix = end >= 12 ? 'PM' : 'AM'
+  if (startSuffix === endSuffix) return `${startDisplay}-${endDisplay}${endSuffix}`
+  return `${startDisplay}${startSuffix}-${endDisplay}${endSuffix}`
+}
+
+function formatReservationCourtTimes(rows: any[]) {
+  const byCourt = new Map<number, number[]>()
+  rows.forEach(row => {
+    const court = Number(row.court_number)
+    const start = Number(String(row.start_time || '').slice(0, 2))
+    const end = Number(String(row.end_time || '').slice(0, 2))
+    if (!byCourt.has(court)) byCourt.set(court, [])
+    byCourt.get(court)!.push(start, end)
+  })
+  return [...byCourt.entries()].sort(([a], [b]) => a - b).map(([court]) => {
+    const starts = rows.filter(row => Number(row.court_number) === court).map(row => Number(String(row.start_time || '').slice(0, 2))).sort((a, b) => a - b)
+    const ends = rows.filter(row => Number(row.court_number) === court).map(row => Number(String(row.end_time || '').slice(0, 2))).sort((a, b) => a - b)
+    const ranges: Array<[number, number]> = []
+    starts.forEach((start, index) => {
+      const end = ends[index] ?? start + 1
+      const last = ranges[ranges.length - 1]
+      if (last && last[1] === start) last[1] = end
+      else ranges.push([start, end])
+    })
+    return `Court ${court}: ${ranges.map(([start, end]) => formatLookupRange(start, end)).join(', ')}`
+  }).join(' · ')
 }
 
 function formatSummaryRanges(bookings: BookingSelection[]) {
@@ -136,6 +171,13 @@ function App() {
   const [availabilityError, setAvailabilityError] = useState('')
   const [confirmation, setConfirmation] = useState<any>(null)
   const [showReservationGuidelines, setShowReservationGuidelines] = useState(false)
+  const [showFindReservation, setShowFindReservation] = useState(false)
+  const [reservationReference, setReservationReference] = useState('')
+  const [reservationLookupLoading, setReservationLookupLoading] = useState(false)
+  const [reservationLookupError, setReservationLookupError] = useState('')
+  const [reservationLookupResults, setReservationLookupResults] = useState<any[]>([])
+  const [reservationReceiptUrl, setReservationReceiptUrl] = useState('')
+  const [reservationReceiptLoading, setReservationReceiptLoading] = useState(false)
 
   const total = useMemo(() => selectedBookings.reduce((sum, booking) => sum + rateFor(booking.hour), 0), [selectedBookings])
 
@@ -300,12 +342,45 @@ function App() {
         bookings: [...selectedBookings].sort((a, b) => a.hour - b.hour || a.court - b.court),
         total,
         paymentMethod: 'Full payment online (GCash QR)',
+        receiptFile: receipt,
+        receiptPreviewUrl: receipt ? URL.createObjectURL(receipt) : null,
       })
       setNotice('')
       setStep(4)
     } catch (error: any) {
       console.error('Booking submission error:', error)
       setNotice(error?.message || 'Could not submit booking. Please try again.')
+    }
+  }
+
+  const findReservation = async () => {
+    const reference = reservationReference.trim().toUpperCase()
+    if (!reference) {
+      setReservationLookupError('Please enter your booking reference.')
+      return
+    }
+    setReservationLookupLoading(true)
+    setReservationLookupError('')
+    setReservationLookupResults([])
+    setReservationReceiptUrl('')
+    const { data, error } = await supabase.rpc('find_public_booking_by_reference', { p_reference: reference })
+    setReservationLookupLoading(false)
+    if (error) {
+      console.error('Reservation lookup error:', error)
+      setReservationLookupError('Unable to search reservations right now. Please try again later.')
+      return
+    }
+    if (!data || data.length === 0) {
+      setReservationLookupError('No reservation found for that booking reference. Please check it and try again.')
+      return
+    }
+    setReservationLookupResults(data)
+    const receiptPath = data.find((row: any) => row.receipt_path)?.receipt_path
+    if (receiptPath) {
+      setReservationReceiptLoading(true)
+      const { data: signedData, error: signedError } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(receiptPath, 60 * 10)
+      setReservationReceiptLoading(false)
+      if (!signedError && signedData?.signedUrl) setReservationReceiptUrl(signedData.signedUrl)
     }
   }
 
@@ -425,6 +500,77 @@ function App() {
           .availability-card { zoom: 0.9 !important; }
           .rate-cards { zoom: 0.8 !important; }
         }
+        .reservation-modal-backdrop {
+          position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+          padding: 20px; background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(3px);
+        }
+        .reservation-modal {
+          width: min(100%, 760px); max-height: calc(100vh - 40px); overflow-y: auto; background: #fff;
+          border: 1px solid #e2e8f0; border-radius: 20px; padding: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.24);
+        }
+        .reservation-modal .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+        .reservation-modal .form-grid { grid-template-columns: minmax(0,1fr) auto !important; align-items: end; }
+        .reservation-modal .form-grid .button { width: auto; justify-content: center; }
+        .lookup-confirmation-card { margin-top:18px; border:1px solid #dbe4ed; border-radius:16px; padding:18px; background:#fff; }
+        .lookup-confirmation-title { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+        .lookup-confirmation-check { width:42px; height:42px; display:flex; align-items:center; justify-content:center; border-radius:12px; background:#e8f7ef; color:#16834b; flex-shrink:0; }
+        .lookup-confirmation-title h3 { margin:0; color:#10284b; font-size:22px; line-height:1.2; }
+        .lookup-confirmation-title p { margin:4px 0 0; color:#64748b; font-size:14px; }
+        .lookup-reference-box { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:16px 12px; margin-bottom:14px; border:1px dashed #e5c17d; border-radius:14px; background:#fffaf0; text-align:center; }
+        .lookup-reference-box small { color:#64748b; font-weight:800; letter-spacing:1px; }
+        .lookup-reference-box strong { color:#10284b; font-size:clamp(25px,5vw,36px); letter-spacing:1px; overflow-wrap:anywhere; }
+        .lookup-status-pill { padding:6px 12px; border-radius:999px; background:#fff0c2; color:#925b00; font-size:12px; font-weight:800; text-transform:uppercase; }
+        .lookup-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+        .lookup-detail-grid > div { display:flex; flex-direction:column; gap:4px; padding:12px; border:1px solid #dbe4ed; border-radius:10px; min-width:0; }
+        .lookup-detail-grid small { color:#64748b; font-size:13px; }
+        .lookup-detail-grid strong { color:#24364f; font-size:15px; line-height:1.35; overflow-wrap:anywhere; }
+        .lookup-courts-detail { grid-column:1/-1; }
+        .lookup-receipt-preview { margin-top:0; margin-bottom:14px; padding:14px; border:1px solid #dbe4ed; border-radius:12px; background:#f8fafc; }
+        .lookup-receipt-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; }
+        .lookup-receipt-heading > div { display:grid; gap:3px; }
+        .lookup-receipt-heading small { font-size:10px; letter-spacing:.8px; font-weight:800; color:#64748b; }
+        .lookup-receipt-heading strong { font-size:14px; color:#10284b; }
+        .lookup-receipt-heading span { display:flex; align-items:center; gap:5px; color:#15803d; font-size:12px; font-weight:700; white-space:nowrap; }
+        .lookup-receipt-image { display:block; width:100%; max-height:520px; object-fit:contain; background:#fff; border:1px solid #e2e8f0; border-radius:10px; }
+        .lookup-receipt-loading, .lookup-receipt-note { color:#64748b; font-size:12px; line-height:1.5; }
+        .lookup-receipt-unavailable { display:flex; gap:10px; align-items:center; padding:14px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; color:#64748b; font-size:13px; }
+        .lookup-receipt-note { margin:9px 0 0; }
+        .lookup-important { padding:12px 14px; margin-bottom:8px; border:1px solid #f2d8a7; border-radius:10px; background:#fff7ed; color:#334155; font-size:14px; line-height:1.45; }
+        .lookup-important strong { color:#9a3412; }
+        .lookup-important p { margin:4px 0 0; }
+        .lookup-footnote { margin:0; color:#64748b; font-size:12px; }
+        @media (max-width: 640px) {
+          .reservation-modal-backdrop { padding:12px; align-items:center; }
+          .reservation-modal { padding:14px; border-radius:14px; max-height:calc(100dvh - 24px); }
+          .reservation-modal .section-heading { gap:8px; }
+          .reservation-modal .form-grid { grid-template-columns:minmax(0,1fr) !important; }
+          .reservation-modal .form-grid .button { width:100%; }
+          .lookup-confirmation-card { margin-top:12px; padding:10px; border-radius:10px; }
+          .lookup-confirmation-title { gap:7px; margin-bottom:8px; }
+          .lookup-confirmation-check { width:30px; height:30px; border-radius:8px; }
+          .lookup-confirmation-check svg { width:18px; height:18px; }
+          .lookup-confirmation-title h3 { font-size:16px; }
+          .lookup-confirmation-title p { font-size:10px; margin-top:2px; }
+          .lookup-reference-box { padding:10px 7px; gap:5px; margin-bottom:8px; border-radius:9px; }
+          .lookup-reference-box small { font-size:9px; }
+          .lookup-reference-box strong { font-size:clamp(20px,7vw,27px); }
+          .lookup-status-pill { padding:4px 8px; font-size:9px; }
+          .lookup-detail-grid { gap:5px; margin-bottom:8px; }
+          .lookup-detail-grid > div { padding:7px; gap:2px; border-radius:7px; }
+          .lookup-detail-grid small { font-size:9px; line-height:1.1; }
+          .lookup-detail-grid strong { font-size:11px; line-height:1.25; }
+          .lookup-receipt-preview { padding:9px; margin-top:0; margin-bottom:7px; border-radius:8px; }
+          .lookup-receipt-heading { margin-bottom:7px; }
+          .lookup-receipt-heading small { font-size:9px; }
+          .lookup-receipt-heading strong { font-size:11px; }
+          .lookup-receipt-heading span { font-size:9px; }
+          .lookup-receipt-image { max-height:320px; border-radius:7px; }
+          .lookup-receipt-note { font-size:9px; line-height:1.3; margin-top:5px; }
+          .lookup-receipt-unavailable { padding:8px; font-size:10px; }
+          .lookup-important { padding:7px 8px; margin-bottom:5px; border-radius:7px; font-size:10px; line-height:1.25; }
+          .lookup-important p { margin-top:2px; }
+          .lookup-footnote { font-size:9px; line-height:1.2; }
+        }
       `}</style>
       <header className="header">
         <a className="brand" href="#home" aria-label="NESLI Sports home">
@@ -440,6 +586,7 @@ function App() {
           <a href="#courts" onClick={() => setMobileMenu(false)}>Courts</a>
           <a href="#rates" onClick={() => setMobileMenu(false)}>Rates</a>
           <a href="#about" onClick={() => setMobileMenu(false)}>About</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setMobileMenu(false); setShowFindReservation(true) }}>Find Reservation</a>
         </nav>
         <button className="menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle menu">
           {mobileMenu ? <X /> : <Menu />}
@@ -469,8 +616,50 @@ function App() {
           <Benefit icon={<CalendarDays/>} title="Real-time Booking" text="See available slots and book instantly."/>
           <Benefit icon={<Zap/>} title="Multiple Courts" text="Book any available court."/>
           <Benefit icon={<CreditCard/>} title="Online Payment" text="Pay your reservation online."/>
-          <Benefit icon={<Bell/>} title="Instant Updates" text="Get booking confirmations and updates."/>
         </section>
+
+        {showFindReservation && (
+          <div className="reservation-modal-backdrop" onClick={() => { setShowFindReservation(false); setReservationLookupResults([]); setReservationLookupError('') }}>
+            <section id="find-reservation" className="reservation-modal" role="dialog" aria-modal="true" aria-labelledby="reservation-modal-title" onClick={(e) => e.stopPropagation()}>
+              <div className="section-heading">
+                <div><p className="eyebrow dark">RESERVATION LOOKUP</p><h2 id="reservation-modal-title">Find Reservation</h2><p>Enter your booking reference to view your reservation details.</p></div>
+                <button type="button" className="icon-button" aria-label="Close reservation lookup" onClick={() => { setShowFindReservation(false); setReservationLookupResults([]); setReservationLookupError('') }}><X/></button>
+              </div>
+              <div className="form-grid" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'end' }}>
+                <label>Booking Reference<input value={reservationReference} onChange={e => setReservationReference(e.target.value.toUpperCase())} placeholder="Enter your booking reference" autoCapitalize="characters" /></label>
+                <button type="button" className="button button-blue" onClick={findReservation} disabled={reservationLookupLoading}><Search size={17}/>{reservationLookupLoading ? 'Searching…' : 'Find Reservation'}</button>
+              </div>
+              {reservationLookupError && <p role="alert" style={{ color: '#b91c1c', marginTop: 14 }}>{reservationLookupError}</p>}
+              {reservationLookupResults.length > 0 && (
+                <div className="lookup-confirmation-card">
+                  <div className="lookup-confirmation-title">
+                    <span className="lookup-confirmation-check"><CheckCircle2 size={24}/></span>
+                    <div><h3>Reservation Details</h3><p>Reservation status and payment information.</p></div>
+                  </div>
+                  <div className="lookup-reference-box">
+                    <small>BOOKING REFERENCE</small>
+                    <strong>{reservationReference.trim().toUpperCase()}</strong>
+                    <span className="lookup-status-pill">{reservationLookupResults[0].status || 'Pending'}</span>
+                  </div>
+                  <div className="lookup-detail-grid">
+                    <div><small>Customer</small><strong>{reservationLookupResults[0].booker_name}</strong></div>
+                    <div><small>Play Date</small><strong>{new Date(`${reservationLookupResults[0].booking_date}T00:00:00`).toLocaleDateString('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</strong></div>
+                    <div className="lookup-courts-detail"><small>Booked Courts & Times</small><strong>{formatReservationCourtTimes(reservationLookupResults)}</strong></div>
+                    <div><small>Rent Total</small><strong>₱{reservationLookupResults.reduce((sum:number,row:any)=>sum+Number(row.amount_due||0),0).toLocaleString()}</strong></div>
+                    <div><small>Payment Status</small><strong>{reservationLookupResults[0].payment_status || (Number(reservationLookupResults[0].amount_paid || 0) > 0 ? 'Paid' : 'Awaiting receipt verification')}</strong></div>
+                  </div>
+                  <div className="lookup-receipt-preview">
+                    <div className="lookup-receipt-heading"><div><small>PAYMENT RECEIPT</small><strong>Payment Receipt Preview</strong></div><span><CheckCircle2 size={15}/> Submitted</span></div>
+                    {reservationReceiptLoading ? <p className="lookup-receipt-loading">Loading receipt preview…</p> : reservationReceiptUrl ? <a href={reservationReceiptUrl} target="_blank" rel="noreferrer"><img src={reservationReceiptUrl} alt="Uploaded payment receipt" className="lookup-receipt-image" /></a> : <div className="lookup-receipt-unavailable"><FileText size={20}/><span>{reservationLookupResults.some((row:any)=>row.receipt_path) ? 'Receipt preview unavailable. Try again later.' : 'No payment receipt is attached to this reservation.'}</span></div>}
+                    <p className="lookup-receipt-note">Receipt submitted with this reservation. Tap the image to view it full size.</p>
+                  </div>
+                  <div className="lookup-important"><strong>Important</strong><p>Keep your booking reference. Reservation details may still be pending admin confirmation and payment receipt verification.</p></div>
+                  <p className="lookup-footnote">Reservation request details only—not final approval.</p>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
 
         <section className="booking-section" id="booking">
           <div className="booking-panel">
@@ -622,6 +811,23 @@ function App() {
                   <div><small>Payment Option</small><strong>{confirmation.paymentMethod}</strong></div>
                   
                   <div className="confirmation-payment-status"><small>Payment Status</small><strong>Awaiting receipt verification</strong></div>
+                </div>
+                <div className="confirmation-receipt">
+                  <div className="confirmation-receipt-heading">
+                    <div><small>PAYMENT RECEIPT</small><strong>Uploaded successfully</strong></div>
+                    <span><CheckCircle2 size={16}/> Received</span>
+                  </div>
+                  {confirmation.receiptFile?.type?.startsWith('image/') && confirmation.receiptPreviewUrl ? (
+                    <a className="confirmation-receipt-image-link" href={confirmation.receiptPreviewUrl} target="_blank" rel="noreferrer">
+                      <img src={confirmation.receiptPreviewUrl} alt="Uploaded payment receipt" className="confirmation-receipt-image" />
+                    </a>
+                  ) : (
+                    <div className="confirmation-receipt-file">
+                      <Upload size={20}/>
+                      <div><strong>{confirmation.receiptFile?.name || 'Payment receipt uploaded'}</strong><small>Receipt file submitted with your reservation</small></div>
+                    </div>
+                  )}
+                  <p className="confirmation-receipt-note">Your receipt is attached to this reservation and will be reviewed by the admin.</p>
                 </div>
                 <div className="confirmation-policy"><strong>Important</strong><p>Keep your booking reference. Reservation is pending admin confirmation and payment receipt verification.</p></div>
                 <p className="confirmation-footnote">Request receipt only—not final approval.</p>
@@ -837,6 +1043,19 @@ const confirmationStyles = `
 #reservation-confirmation .confirmation-grid strong { color: #24364f; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 #reservation-confirmation .confirmation-grid > div:nth-child(5),
 #reservation-confirmation .confirmation-grid > div:nth-child(7) { background: #f8fafc; }
+#reservation-confirmation .confirmation-receipt { border: 1px solid #dbe4ed; border-radius: 14px; padding: 16px; margin: 0 0 16px; background: #f8fafc; }
+#reservation-confirmation .confirmation-receipt-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+#reservation-confirmation .confirmation-receipt-heading > div { display: grid; gap: 3px; }
+#reservation-confirmation .confirmation-receipt-heading small { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: .8px; }
+#reservation-confirmation .confirmation-receipt-heading strong { color: #24364f; font-size: 14px; }
+#reservation-confirmation .confirmation-receipt-heading span { display: inline-flex; align-items: center; gap: 5px; color: #15803d; font-size: 12px; font-weight: 700; white-space: nowrap; }
+#reservation-confirmation .confirmation-receipt-image-link { display: block; width: 100%; }
+#reservation-confirmation .confirmation-receipt-image { display: block; width: 100%; max-height: 520px; object-fit: contain; background: white; border: 1px solid #dbe4ed; border-radius: 10px; }
+#reservation-confirmation .confirmation-receipt-file { display: flex; align-items: center; gap: 12px; padding: 14px; background: white; border: 1px solid #dbe4ed; border-radius: 10px; color: #1d4ed8; }
+#reservation-confirmation .confirmation-receipt-file div { display: grid; gap: 3px; min-width: 0; }
+#reservation-confirmation .confirmation-receipt-file strong { color: #24364f; overflow-wrap: anywhere; }
+#reservation-confirmation .confirmation-receipt-file small { color: #64748b; }
+#reservation-confirmation .confirmation-receipt-note { color: #64748b; font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
 #reservation-confirmation .confirmation-policy {
   padding: 16px; margin: 0 0 12px; border: 1px solid #fed7aa; border-radius: 13px;
   background: #fff7ed; color: #334155;
@@ -863,7 +1082,30 @@ const confirmationStyles = `
   #reservation-confirmation .confirmation-grid strong { font-size: 11px; line-height: 1.25; }
   #reservation-confirmation .confirmation-grid > div:nth-child(4),
   #reservation-confirmation .confirmation-grid > div:nth-child(8) { grid-column: 1 / -1; }
-  #reservation-confirmation .confirmation-policy { padding: 7px 8px; margin-bottom: 5px; border-radius: 7px; font-size: 10px; line-height: 1.25; }
+  #reservation-confirmation .confirmation-receipt { border: 1px solid #dbe4ed; border-radius: 14px; padding: 16px; margin: 0 0 16px; background: #f8fafc; }
+#reservation-confirmation .confirmation-receipt-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+#reservation-confirmation .confirmation-receipt-heading > div { display: grid; gap: 3px; }
+#reservation-confirmation .confirmation-receipt-heading small { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: .8px; }
+#reservation-confirmation .confirmation-receipt-heading strong { color: #24364f; font-size: 14px; }
+#reservation-confirmation .confirmation-receipt-heading span { display: inline-flex; align-items: center; gap: 5px; color: #15803d; font-size: 12px; font-weight: 700; white-space: nowrap; }
+#reservation-confirmation .confirmation-receipt-image-link { display: block; width: 100%; }
+#reservation-confirmation .confirmation-receipt-image { display: block; width: 100%; max-height: 520px; object-fit: contain; background: white; border: 1px solid #dbe4ed; border-radius: 10px; }
+#reservation-confirmation .confirmation-receipt-file { display: flex; align-items: center; gap: 12px; padding: 14px; background: white; border: 1px solid #dbe4ed; border-radius: 10px; color: #1d4ed8; }
+#reservation-confirmation .confirmation-receipt-file div { display: grid; gap: 3px; min-width: 0; }
+#reservation-confirmation .confirmation-receipt-file strong { color: #24364f; overflow-wrap: anywhere; }
+#reservation-confirmation .confirmation-receipt-file small { color: #64748b; }
+#reservation-confirmation .confirmation-receipt-note { color: #64748b; font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+  #reservation-confirmation .confirmation-receipt { padding: 9px; margin-bottom: 7px; border-radius: 8px; }
+  #reservation-confirmation .confirmation-receipt-heading { margin-bottom: 6px; gap: 6px; }
+  #reservation-confirmation .confirmation-receipt-heading small { font-size: 9px; }
+  #reservation-confirmation .confirmation-receipt-heading strong { font-size: 11px; }
+  #reservation-confirmation .confirmation-receipt-heading span { font-size: 9px; }
+  #reservation-confirmation .confirmation-receipt-image { max-height: 320px; border-radius: 7px; }
+  #reservation-confirmation .confirmation-receipt-file { padding: 8px; gap: 7px; border-radius: 7px; }
+  #reservation-confirmation .confirmation-receipt-file strong { font-size: 10px; }
+  #reservation-confirmation .confirmation-receipt-file small { font-size: 9px; }
+  #reservation-confirmation .confirmation-receipt-note { font-size: 9px; line-height: 1.25; margin-top: 5px; }
+#reservation-confirmation .confirmation-policy { padding: 7px 8px; margin-bottom: 5px; border-radius: 7px; font-size: 10px; line-height: 1.25; }
   #reservation-confirmation .confirmation-policy p { margin-top: 2px; line-height: 1.25; }
   #reservation-confirmation .confirmation-footnote { font-size: 9px; line-height: 1.2; margin: 0 0 7px; }
   #reservation-confirmation > button { min-height: 34px; padding: 7px 12px; border-radius: 7px; font-size: 11px; width: 100%; }
